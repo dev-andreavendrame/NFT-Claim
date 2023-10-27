@@ -18,6 +18,7 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * -----------------------------------------------------
      */
 
+    // Addresses that can manage Claim entries
     mapping(address => bool) public whitelistedWallets;
 
     // Counters for different claim event types
@@ -28,6 +29,7 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
     uint256[] private _simpleClaimEventsActive;
     uint256[] private _randomClaimEventsActive;
 
+    // Claim events information
     mapping(uint256 => SimpleClaimEvent) public simpleClaimEventDetails;
     mapping(uint256 => RandomClaimEvent) public randomClaimEventDetails;
 
@@ -525,6 +527,26 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         return nftsToClaim;
     }
 
+    /**
+     * @dev starting from an 'availableAmounts' array where every value is
+     * a number greater or equal to 0, it returns a new array of the same length
+     * where each entry is generated "randomly" and its value is in the
+     * range [0, availableAmounts[i]] (i is the i-th element of the array).
+     *
+     * @param availableAmounts array that represents the available values that
+     * need to be distributed randomly in the result array
+     * @param amountToClaim the maximum possible number obtainable, that
+     * corresponds to the sum of the values added to the 'availableAmounts'
+     * array at the end of the function
+     *
+     * @return an array of the same length of the 'availableAmounts' parameter
+     * where the sum of all its values is less than or equal to the paramter
+     * 'amountToClaim' and each i-th value of result array is less than or equal to
+     * the i-th value of the 'availableAmounts' array
+     *
+     * Note: if the 'availableAmounts' array has only 0 values the result of the
+     * function will corresponds to the an array with the same values.
+     */
     function _getRandomValues(
         uint256[] memory availableAmounts,
         uint256 amountToClaim
@@ -618,6 +640,27 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         return (nftsToClaim, nftsLeft, currentAvailableAmounts);
     }
 
+    /**
+     * @dev starting from an 'availableAmounts' array where every value is
+     * a number greater or equal to 0, it returns a new array of the same length
+     * where each entry is generated "randomly" and its value is in the
+     * range [0, availableAmounts[i]] (i is the i-th element of the array).
+     *
+     * @param currentDistribution array that represent an initial number distribution
+     * @param availableAmounts array that represents the available values that
+     * need to be distributed
+     * @param amountToClaim the maximum possible number obtainable, that corresponds
+     * to the sum of the  values added to the 'currentDistribution' array
+     * at the end of the function
+     *
+     * @return an array of the same length of the 'availableAmounts', where each value i-th
+     * of it is less than or equal to the sum of currentDistribution[i] + availableAmounts[i]
+     * and the total sum of the values in the returned array is less that or equal to
+     * the sum of the values in the 'currentDistribution' parameter + 'amountToClaim'.
+     *
+     * Note: if the 'availableAmounts' array has only 0 values the result of the
+     * function will corresponds to the an array with the same values.
+     */
     function _averageDistribution(
         uint256[] memory currentDistribution,
         uint256 amountToClaim,
@@ -704,6 +747,27 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         return (nftsToClaim, nftsLeft, currentAvailableAmounts);
     }
 
+    /**
+     * @dev starting from an 'availableAmounts' array where every value is
+     * a number greater or equal to 0, it returns a new array of the same length
+     * where each entry is generated "randomly" and its value is in the
+     * range [0, availableAmounts[i]] (i is the i-th element of the array).
+     *
+     * @param currentDistribution array that represent an initial number distribution
+     * @param availableAmounts array that represents the available values that
+     * need to be distributed
+     * @param amountToClaim the maximum possible number obtainable, that corresponds
+     * to the sum of the  values added to the 'currentDistribution' array
+     * at the end of the function
+     *
+     * @return an array of the same length of the 'availableAmounts', where each value i-th
+     * of it is less than or equal to the sum of currentDistribution[i] + availableAmounts[i]
+     * and the total sum of the values in the returned array is less that or equal to
+     * the sum of the values in the 'currentDistribution' parameter + 'amountToClaim'.
+     *
+     * Note: if the 'availableAmounts' array has only 0 values the result of the
+     * function will corresponds to the an array with the same values.
+     */
     function _finalDistribution(
         uint256[] memory currentDistribution,
         uint256 amountToClaim,
@@ -747,6 +811,12 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * --------------------------------------------------------------------
      */
 
+    /**
+     * @dev Get the current active Simple Claim events
+     *
+     * @return an array of IDs that represents the current Simple Claim
+     * active events. The result can be an empty array.
+     */
     function getSimpleClaimEventsActive()
         external
         view
@@ -755,6 +825,12 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         return _simpleClaimEventsActive;
     }
 
+    /**
+     * @dev Get the current active Random Claim events
+     *
+     * @return an array of IDs that represents the current Random Claim
+     * active events. The result can be an empty array.
+     */
     function getRandomClaimEventsActive()
         external
         view
