@@ -8,13 +8,107 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
+/**
+ * @dev Contract that allows addresses to claim NFTs stored in the contract itself.
+ *
+ * The claim is divided into 2 types and threated as events: SimpleClaimEvent and RandomClaimEvent.
+ *
+ * A claim event is associated with a specific ERC1155 contract and users can claim
+ * only NFTs that belong to the same contract in the same claim event.
+ * In order to claim one or more NFTs related to a specific event a user needs to be elegible.
+ *
+ * The MANAGER_ROLE is a role assigned to an address that can manage operations like
+ *
+ * - Allow an address to claim N (with N > 0) in a specific event
+ * - Remove an address from being able to claim N (with N > 0) in a specific event
+ * - Whitelist an operator to let it sends NFTs to this contract in order to have
+ *      NFTs distributable in a claim event
+ * - Whitelist an operator to let it sends NFTs to this contract in order to have
+ *      NFTs distributable in a claim event
+ * - Create and stop a specific claim event
+ *
+ * ---- Claim events details ----
+ *
+ * Simple Claim
+ *
+ * A wallet address that is able to claim in this event type can claim at least 1 ERC1155 (NFT) copy
+ * stored in the contract of a specific ERC1155 contract address
+ *
+ * Random Claim
+ *
+ * A wallet address that is able to claim in this event type can claim randomly at least 1 ERC1155 (NFT) copy
+ * from a specified set of ERC1155 token IDs. These tokens are stored in the contract and belong all
+ * to the same ERC1155 contract.
+ *
+ * ---- WARNINGS ----
+ *
+ * - There are no limitations related to the presence of ERC1155 tokens into the smart
+ *      contract when a MANAGER_ROLE wallet address creates a Claim event.
+ *
+ * - A RandomClaimEvent or a SimpleClaimEvent can be created without having deposited the necessary
+ *      ERC1155 token(s) into this contract.
+ *
+ * - If a wallet address tries to claim more ERC1155 tokens than the amount available the result
+ *      of the claiming will be a claim of all the available tokens.
+ *
+ * - A wallet address that is elegible to claim in a specific event can't claim 0 ERC1155 tokens.
+ *      In this case the transaction reverts.
+ *
+ * - A wallet address with the MANAGER_ROLE role can add/remove the permission for a specific
+ *      wallet address to partecipate in a claim event anytime
+ *
+ * - Claim events don't have an expiration block.
+ */
 contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     /**
      * -----------------------------------------------------
-     * -------------------- NFTS DETAILS -------------------
+     * -------------------- CLAIM EVENTS -------------------
+     * -----------------------------------------------------
+     */
+
+    event ADDED_SIMPLE_CLAIM_ENTRY(
+        uint256 indexed _eventId,
+        uint256 indexed _claimableAmount
+    );
+
+    event ADDED_RANDOM_CLAIM_ENTRY(
+        uint256 indexed _eventId,
+        uint256 indexed _claimableAmount
+    );
+
+    event SIMPLE_NFTS_CLAIM(
+        address indexed _wallet,
+        uint256 indexed _eventId,
+        uint256 indexed _claimableAmount
+    );
+
+    event RANDOM_NFTS_CLAIM(
+        address indexed _wallet,
+        uint256 indexed _eventId,
+        uint256 indexed _claimableAmount
+    );
+
+    event CLAIM_EVENT_CREATED(
+        uint256 indexed _eventId,
+        ClaimType indexed _eventType,
+        address _creator
+    );
+
+    event NFTS_OPERATOR_ADDED(
+        address indexed _newOperator,
+        address indexed _addedBy
+    );
+
+    event NFTS_OPERATOR_REMOVED(
+        address indexed _oldOperator,
+        address indexed _removeddBy
+    );
+    /**
+     * -----------------------------------------------------
+     * -------------------- CLAIM EVENTS DETAILS -----------
      * -----------------------------------------------------
      */
 
@@ -69,10 +163,16 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * --------------------------------------------------------------------
      */
 
+    /**
+     * @dev default implementation
+     */
     function pause() public onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
+    /**
+     * @dev default implementation
+     */
     function unpause() public onlyRole(PAUSER_ROLE) {
         _unpause();
     }
@@ -96,6 +196,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
 
         // Add support
         whitelistedWallets[newSender] = true;
+
+        emit NFTS_OPERATOR_ADDED(newSender, _msgSender());
     }
 
     /**
@@ -112,6 +214,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
 
         // Remove support
         whitelistedWallets[oldSender] = false;
+
+        emit NFTS_OPERATOR_REMOVED(oldSender, _msgSender());
     }
 
     /**
@@ -143,6 +247,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         require(claimableAmount > 0, "Can't let claim 0 NFT copies");
 
         simpleClaimableNfts[simpleClaimEventId][claimer] = claimableAmount;
+
+        emit ADDED_SIMPLE_CLAIM_ENTRY(simpleClaimEventId, claimableAmount);
     }
 
     /**
@@ -170,6 +276,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
             "Claimers and amounts don't have the same length"
         );
 
+        uint256 totalClaimableAmount = 0;
+
         for (uint256 i = 0; i < claimableAmounts.length; i++) {
             // Check parameter validity
             require(claimableAmounts[i] > 0, "Can't let claim 0 NFT copies");
@@ -177,7 +285,10 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
             simpleClaimableNfts[simpleClaimEventId][
                 claimers[i]
             ] = claimableAmounts[i];
+            totalClaimableAmount = totalClaimableAmount + claimableAmounts[i];
         }
+
+        emit ADDED_SIMPLE_CLAIM_ENTRY(simpleClaimEventId, totalClaimableAmount);
     }
 
     /**
@@ -203,6 +314,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
 
         // SimpleClaimEvent.id => wallet address => claimable NFTs amount
         randomClaimableNfts[randomClaimEventId][newClaimer] = claimableAmount;
+
+        emit ADDED_RANDOM_CLAIM_ENTRY(randomClaimEventId, claimableAmount);
     }
 
     /**
@@ -231,6 +344,8 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
             "Claimers and amounts don't have the same length"
         );
 
+        uint256 totalClaimableAmount = 0;
+
         for (uint256 i = 0; i < claimableAmounts.length; i++) {
             // Check parameter validity
             require(claimableAmounts[i] > 0, "Can't let claim 0 NFT copies");
@@ -238,7 +353,10 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
             randomClaimableNfts[randomClaimEventId][
                 claimers[i]
             ] = claimableAmounts[i];
+            totalClaimableAmount = totalClaimableAmount + claimableAmounts[i];
         }
+
+        emit ADDED_RANDOM_CLAIM_ENTRY(randomClaimEventId, totalClaimableAmount);
     }
 
     /**
@@ -288,6 +406,12 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         simpleClaimEventDetails[currentEventId] = newClaimEvent;
         // Add event to active list
         _simpleClaimEventsActive.push(currentEventId);
+
+        emit CLAIM_EVENT_CREATED(
+            currentEventId,
+            ClaimType.SIMPLE,
+            _msgSender()
+        );
     }
 
     /**
@@ -317,6 +441,12 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
         randomClaimEventDetails[currentEventId] = newClaimEvent;
         // Add event to active list
         _randomClaimEventsActive.push(currentEventId);
+
+        emit CLAIM_EVENT_CREATED(
+            currentEventId,
+            ClaimType.RANDOM,
+            _msgSender()
+        );
     }
 
     /**
@@ -340,9 +470,11 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
     {
         if (claimType == ClaimType.SIMPLE) {
             uint256 claimed = _simpleClaim(claimId, _msgSender());
+            emit SIMPLE_NFTS_CLAIM(_msgSender(), claimId, claimed);
             return claimed;
         } else if (claimType == ClaimType.RANDOM) {
             uint256 claimed = _randomClaim(claimId, _msgSender());
+            emit RANDOM_NFTS_CLAIM(_msgSender(), claimId, claimed);
             return claimed;
         } else {
             revert("No valid Claim type speficied");
@@ -748,24 +880,24 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
     }
 
     /**
-     * @dev starting from an 'availableAmounts' array where every value is
+     * @dev starting from an 'currentAvailableAmounts' array where every value is
      * a number greater or equal to 0, it returns a new array of the same length
      * where each entry is generated "randomly" and its value is in the
-     * range [0, availableAmounts[i]] (i is the i-th element of the array).
+     * range [0, currentAvailableAmounts[i]] (i is the i-th element of the array).
      *
      * @param currentDistribution array that represent an initial number distribution
-     * @param availableAmounts array that represents the available values that
+     * @param currentAvailableAmounts array that represents the available values that
      * need to be distributed
      * @param amountToClaim the maximum possible number obtainable, that corresponds
      * to the sum of the  values added to the 'currentDistribution' array
      * at the end of the function
      *
-     * @return an array of the same length of the 'availableAmounts', where each value i-th
-     * of it is less than or equal to the sum of currentDistribution[i] + availableAmounts[i]
+     * @return an array of the same length of the 'currentAvailableAmounts', where each value i-th
+     * of it is less than or equal to the sum of currentDistribution[i] + currentAvailableAmounts[i]
      * and the total sum of the values in the returned array is less that or equal to
      * the sum of the values in the 'currentDistribution' parameter + 'amountToClaim'.
      *
-     * Note: if the 'availableAmounts' array has only 0 values the result of the
+     * Note: if the 'currentAvailableAmounts' array has only 0 values the result of the
      * function will corresponds to the an array with the same values.
      */
     function _finalDistribution(
@@ -911,6 +1043,11 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * --------------------------------------------------------------------
      */
 
+    /**
+     * @dev default implementation plus a check
+     * to verify if the 'operator' is whitelisted and
+     * allowed to send NFTs to this contract
+     */
     function onERC1155Received(
         address operator,
         address from,
@@ -931,6 +1068,11 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
             );
     }
 
+    /**
+     * @dev default implementation plus a check
+     * to verify if the 'operator' is whitelisted and
+     * allowed to send NFTs to this contract
+     */
     function onERC1155BatchReceived(
         address operator,
         address from,
