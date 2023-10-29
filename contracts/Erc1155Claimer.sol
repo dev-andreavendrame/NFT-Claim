@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @dev Contract that allows addresses to claim NFTs stored in the contract itself.
@@ -59,7 +60,12 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
  *
  * - Claim events don't have an expiration block.
  */
-contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
+contract Erc1155Claimer is
+    Pausable,
+    AccessControl,
+    IERC1155Receiver,
+    ReentrancyGuard
+{
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
@@ -466,6 +472,7 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      */
     function claim(ClaimType claimType, uint256 claimId)
         public
+        nonReentrant
         returns (uint256)
     {
         if (claimType == ClaimType.SIMPLE) {
@@ -490,7 +497,7 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * @return the amount of claimed NFTs
      */
     function _simpleClaim(uint256 claimId, address claimer)
-        public
+        private
         returns (uint256)
     {
         SimpleClaimEvent memory eventDetails = simpleClaimEventDetails[claimId];
@@ -544,7 +551,7 @@ contract Erc1155Claimer is Pausable, AccessControl, IERC1155Receiver {
      * @return the amount of claimed NFTs
      */
     function _randomClaim(uint256 claimId, address claimer)
-        public
+        private
         returns (uint256)
     {
         RandomClaimEvent memory eventDetails = randomClaimEventDetails[claimId];
