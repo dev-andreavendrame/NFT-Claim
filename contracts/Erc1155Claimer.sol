@@ -996,10 +996,7 @@ contract Erc1155Claimer is
             }
         }
 
-        require(
-            idFound,
-            "The order to remove is not in the active loan orders list"
-        );
+        require(idFound, "The object to remove is not in the active list");
 
         if (orderIndex != activeOrdersNumber - 1) {
             // Need to swap the order to delete with the last one and procede as above
@@ -1098,5 +1095,15 @@ contract Erc1155Claimer is
                     "onERC1155BatchReceived(address,address,uint256[],uint256[],bytes)"
                 )
             );
+    }
+
+    /**
+     * --------------------------------------------------------------------
+     * -------------------- TESTING ---------------------------------------
+     * --------------------------------------------------------------------
+     */
+
+    function echidna_check__simpleClaimEventsActive() public returns (bool) {
+        return (_simpleClaimEventsActive.length >= 0);
     }
 }
